@@ -1,0 +1,9 @@
+- [Pacvue brand colors](pacvue-brand-colors.md) — Blue is #0D6EFD (not Element default #409EFF), Orange is #ff9f43, Brand collection has Blue/Orange modes
+- [Pacvue dropdown design intent](pacvue-dropdown-design-intent.md) — PacvueDropdown is data-driven dropdown panel (search+virtual+cascade), not Element's command-menu Dropdown
+- [Figma file: ENT Design System New](figma-file-ent-design-system.md) — fileKey + page conventions for the design system Figma
+- [Component-from-research workflow](component-from-research-workflow.md) — How the 7-phase workflow + AB critique + composes figma-component-ref-card
+- [Pacvue user persona](pacvue-user-persona.md) — 广告投放运营人员，优先级：KPI指标 > 状态 > 标识 > 操作 > 辅助信息
+- [Pacvue color system](pacvue-color-system.md) — 7类颜色规范：Theme(按钮)、Function(状态)、Transparency(tag)、Neutral(文字三档)、Semantic(组件规则)
+- [Auto-layout rule](pacvue-autolayout-rule.md) — ALWAYS createAutoLayout(), NEVER createFrame() for structural containers; FILL after appendChild
+- [Pacvue component specs](../../../Desktop/element/elementPlus-vue3/.claude/skills/ui-design-workflow/references/pacvue-components.md) — DatePicker/Search/Tag/Table/Pagination/KPI exact specs; pagination active=orange border+text NO fill
+- [UI workflow modes](ui-workflow-modes.md) — Mode A=精细化Figma(autolayout+token+critique), Mode B=快速Demo(Vue SFC+mock data+HMR验证); 决策树在文件里
