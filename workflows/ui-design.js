@@ -161,25 +161,41 @@ const COMP_RESULT_SCHEMA = {
   required: ['name', 'nodeId', 'status'],
 };
 
+// StyleSeed 7-category scoring schema (0–100, letter grade, ranked fix list)
 const REVIEW_SCHEMA = {
   type: 'object',
   properties: {
-    passed: { type: 'boolean' },
-    checks: {
+    score:   { type: 'number' },                          // 0–100
+    grade:   { type: 'string', enum: ['A','B','C','D','F'] },
+    passed:  { type: 'boolean' },                         // score >= 80
+    categories: {
+      type: 'object',
+      properties: {
+        coherence:   { type: 'number' },  // /20
+        color:       { type: 'number' },  // /16
+        typography:  { type: 'number' },  // /16
+        layout:      { type: 'number' },  // /12
+        states:      { type: 'number' },  // /12
+        writing:     { type: 'number' },  // /12
+        motion:      { type: 'number' },  // /12
+      },
+      required: ['coherence','color','typography','layout','states','writing','motion'],
+    },
+    fixList: {
       type: 'array',
       items: {
         type: 'object',
         properties: {
-          criterion: { type: 'string' },
-          passed:    { type: 'boolean' },
-          note:      { type: 'string' },
+          priority:    { type: 'number' },
+          description: { type: 'string' },
+          scoreGain:   { type: 'number' },
         },
-        required: ['criterion', 'passed'],
+        required: ['priority','description','scoreGain'],
       },
     },
     blockers: { type: 'array', items: { type: 'string' } },
   },
-  required: ['passed', 'checks'],
+  required: ['score','grade','passed','categories','fixList'],
 };
 
 // ══════════════════════════════════════════════════════════
@@ -362,52 +378,87 @@ const [, review] = await parallel([
     { phase: 'Assembly', label: 'interactions' }
   ),
 
-  // Phase 5: BLIND CRITIQUE — independent second opinion
+  // Phase 5: BLIND CRITIQUE — StyleSeed 7-category scoring (0–100)
   // IMPORTANT: This agent does NOT receive componentRegistry, tokens, or layout details.
   // It only sees the original brief + a fresh screenshot. This is intentional.
-  // It must form its own view without knowing what decisions were made.
   () => agent(
-    `You are a visual QA reviewer conducting a BLIND review.
+    `You are a visual QA reviewer conducting a BLIND design review.
 
     You do NOT know how this design was built.
     You do NOT know what implementation decisions were made.
-    You have NOT seen the component code or build process.
+    You have NOT seen any code or build process.
 
     You only have:
     1. The original brief (what was requested)
-    2. A fresh screenshot you will take yourself (what was delivered)
+    2. A fresh screenshot you will take yourself right now
 
     ━━━ ORIGINAL BRIEF ━━━
     Task: "${brief.task}"
     Success criteria: "${brief.successCriteria}"
     Figma file: ${brief.figmaFileKey}
 
-    ━━━ YOUR TASK ━━━
-    1. Take a screenshot of the current Figma page using get_screenshot
-    2. Compare the screenshot against the brief — does the result match what was requested?
-    3. Apply these checks with an adversarial mindset: your job is to find problems, not validate decisions
+    ━━━ STEP 1: Take screenshot ━━━
+    Call get_screenshot on the Figma file now. Everything below is evaluated against that image.
 
-    NEVER ask "was X intentional?" — if it doesn't match the brief, flag it.
+    ━━━ STEP 2: Score 0–100 across 7 dimensions ━━━
+    Start each dimension at full marks. Deduct only for violations you can cite specifically.
+    NEVER ask "was X intentional?" — if it looks wrong, deduct.
 
-    ━━━ LAYOUT CHECKS (CRITICAL) ━━━
-    ${LAYOUT_RULES}
-    - Flag CRITICAL: structural containers with absolute x/y (not auto-layout)
-    - Flag CRITICAL: frames that would break on resize (no FILL sizing)
-    - Flag MAJOR: tag opacity on frame (not fill color)
-    - Flag MAJOR: pagination active page with filled background
+    1. COHERENCE — 20 pts
+       −6: mixed corner radii (e.g. sharp card + pill button on same screen)
+       −5: two or more accent colors used for emphasis
+       −6: emoji used as UI icons (🚗🧺⭐ as markers/categories/status)
+       −3: mixed icon families, fill modes, or stroke weights
+       −3: inconsistent control heights (buttons/inputs differ)
+       [Pacvue extra] −8: orange (#ff9f43) AND blue (#0d6efd) both used as primary on same page
 
-    ━━━ COLOR CHECKS (MAJOR) ━━━
-    ${COLOR_SPEC}
-    - Flag MAJOR: button not using #ff9f43 or #0d6efd
-    - Flag MAJOR: text color tier mismatch (#45464f / #66666c / #b2b2b8)
-    - Flag MAJOR: status badge color doesn't match semantic state
-    - Flag MAJOR: blue primary action on an orange-themed page
-    - Flag MINOR: border not from #dedfe3 / #edeef1 family
-    - Flag MINOR: tag background is solid instead of rgba
+    2. COLOR DISCIPLINE — 16 pts
+       −4 each (cap −8): pure black (#000 / text-black) for body text
+       −2 each: hardcoded hex where a Pacvue token exists (--pac-theme-color, --color-title--, etc.)
+       −4: normal/OK state shown in a status color instead of neutral grey
+       −3: decorative hues (rainbow dots, gold stars, different color per card)
+       −4: status conveyed by color alone, no icon or text label
+       [Pacvue extra] −5: tag opacity set on frame.opacity instead of fill color
+       [Pacvue extra] −5: pagination active page uses filled orange background (should be border-only)
 
-    Note: scroll/overflow is a dev concern — do not flag as a design blocker.
+    3. HIERARCHY & TYPOGRAPHY — 16 pts
+       −4: metric number and unit not ~2:1 size ratio (e.g. 48px number / 24px unit)
+       −5: everything the same size and weight, no clear visual primary
+       −4: arbitrary font sizes without a clear scale
+       −3: wrong line-height (too loose on display, too cramped on body)
 
-    Return a structured report with pass/fail per criterion and a blockers list.`,
+    4. LAYOUT & SPACING — 12 pts
+       −6: content placed directly on page background, not inside cards
+       −3: off-grid spacing (7/13/19px values instead of 4/8/12/16/24/32px scale)
+       −3: gap around a group is smaller than the gap inside it
+       −4: same section type repeated consecutively (two identical KPI rows, etc.)
+       [Pacvue extra] −8: structural frame uses absolute x/y positioning instead of auto-layout
+
+    5. STATES — 12 pts
+       −5 each (cap −10): missing empty / loading / error state on any data surface
+       −4: empty state shown with no next-step action
+       −4: error state that blames or uses system-speak ("Invalid input")
+
+    6. UX WRITING — 12 pts
+       −4: button labels that don't name the action ("确认"/"Submit" instead of "发送申请"/"Save changes")
+       −4: error copy that blames user or uses technical jargon
+       −2: two different terms for the same concept; filler words ("请", "successfully")
+
+    7. MOTION & POLISH — 12 pts
+       −3: ad-hoc fade transitions with no consistent timing/easing
+       −4: any motion that delays or blocks content access
+       −3: no prefers-reduced-motion handling on custom animations
+       −2: single hard black shadow (should be layered, low-opacity, slightly tinted)
+
+    ━━━ STEP 3: Build the fix list ━━━
+    Order fixes by SCORE GAIN (biggest improvement first), not by severity alone.
+    Include estimated score gain for each fix.
+
+    ━━━ STEP 4: Determine pass/fail ━━━
+    passed = true only if total score >= 80.
+    Grade: 90+ = A, 80–89 = B, 70–79 = C, 60–69 = D, <60 = F.
+
+    Return the full structured score with per-category breakdown and ranked fixList.`,
     { schema: REVIEW_SCHEMA, phase: 'Review', label: 'blind-critic' }
   ),
 
@@ -415,9 +466,14 @@ const [, review] = await parallel([
 
 // ── Final summary ─────────────────────────────────────────
 const passed = review?.passed ?? false;
+const score = review?.score ?? 0;
+const grade = review?.grade ?? 'F';
 const blockers = review?.blockers ?? [];
 
-log(`Review: ${passed ? '✅ PASSED' : '❌ FAILED'}`);
+log(`Review: ${passed ? '✅ PASSED' : '❌ FAILED'} — ${score}/100 (${grade})`);
+if (review?.fixList?.length) {
+  log(`Top fix: ${review.fixList[0]?.description} (+${review.fixList[0]?.scoreGain} pts)`);
+}
 if (blockers.length > 0) {
   log(`Blockers: ${blockers.join(', ')}`);
 }
