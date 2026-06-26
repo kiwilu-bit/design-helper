@@ -1,8 +1,8 @@
 ---
 name: ui-design-workflow
 description: >
-  Three-mode UI workflow. Mode A = Figma high-fidelity (design system compliant).
-  Mode B = Vue runnable demo (mock data, fast). Mode C = Figma quick wireframe (5 min, no polish).
+  Four-mode UI workflow with universal context handoff via design-spec.json.
+  Modes A/B/C/D can chain in any order — each reads the spec at start and writes to it on completion.
   Always run Pre-flight Check first, then pick a mode.
 ---
 
@@ -10,17 +10,69 @@ description: >
 
 ---
 
+## 模式串联 — 任意顺序，上下文自动传递
+
+四种模式**可以任意顺序串联**，不限定方向。常见链路举例：
+
+| 链路 | 场景 |
+|---|---|
+| B → D → A | 快速验证 → 规范化 → Figma 交付 |
+| C → A | 线框确认结构 → 高保真实现 |
+| A → B | Figma 设计 → 快速跑通原型 |
+| D → A | shadcn 规范前端 → 提炼 Figma 设计稿 |
+| A → D | Figma 设计稿 → shadcn 还原 |
+
+**衔接机制：** 统一用 `/tmp/design-spec.json` 传递上下文。每个模式**开始时读取**、**完成时写入**。
+
+```json
+{
+  "task": "功能描述",
+  "lastMode": "B",
+  "updatedAt": "...",
+  "states": ["upload", "analyzing", "results"],
+  "colorTokens": {
+    "primary": "#FF9F43",
+    "foreground": "#45464F",
+    "border": "#DEDFE3"
+  },
+  "spacingTokens": { "card": "16px", "section": "24px" },
+  "components": {
+    "UploadZone": "src/views/XxxDemo.vue",
+    "KwChip": "src/components/ui/badge.vue"
+  },
+  "screenshots": ["/tmp/design-screenshots/upload.png"],
+  "figma": { "fileKey": "...", "pageId": "...", "nodeIds": {} },
+  "modeD": { "projectPath": "...", "devUrl": "http://localhost:5174" }
+}
+```
+
+**读取规则：**
+```bash
+cat /tmp/design-spec.json 2>/dev/null
+```
+有内容 → 以其中的 `task`、`colorTokens`、`spacingTokens`、`components` 为基准继续工作，不要重新发明。
+没有文件 → 从零开始，完成后创建。
+
+**写入规则：** 每次完成后**追加/覆盖**对应字段，不删除其他模式写入的字段。
+
+---
+
 ## PRE-FLIGHT CHECK (run before EVERY session)
 
-Before picking a mode, answer these 2 questions. If either answer is "no", resolve it first.
+**通用（所有模式）：**
+- [ ] **读取 design-spec.json** → `cat /tmp/design-spec.json 2>/dev/null`。有内容则告知用户"发现上次 [Mode X] 的上下文"，询问是否基于此继续。
 
-### Mode A pre-flight
-- [ ] **Can I access the Figma file?** → Call `get_metadata` on the fileKey. If it errors, ask user to confirm URL/permissions before proceeding.
-- [ ] **Is there a state file from a previous session?** → Check `/tmp/ui-design-state.json`. If it exists and `completedPhases` is non-empty, resume from the last completed phase instead of restarting.
+### Mode A 额外检查
+- [ ] **Can I access the Figma file?** → Call `get_metadata` on the fileKey.
+- [ ] **Is there a state file?** → Check `/tmp/ui-design-state.json`. If `completedPhases` is non-empty, resume.
 
-### Mode B pre-flight
-- [ ] **Is the dev server running?** → `lsof -i :5173 | grep LISTEN`. If not, start it: `npx vite --port 5173 > /tmp/vite.log 2>&1 &`
-- [ ] **Does a similar component already exist?** → `ls src/views/ | grep -i <keyword>`. Reuse or extend before creating a new file.
+### Mode B 额外检查
+- [ ] **Is the dev server running?** → `lsof -i :5173 | grep LISTEN`. If not: `npx vite --port 5173 > /tmp/vite.log 2>&1 &`
+- [ ] **Does a similar component already exist?** → `ls src/views/ | grep -i <keyword>`.
+
+### Mode D 额外检查
+- [ ] **Is there a Mode B reference?** → design-spec.json 的 `components` 字段是否有 Vue 文件路径，有则作为 UX 参考。
+- [ ] **独立项目是否已存在?** → 检查目标目录，避免重复初始化。
 
 ---
 
@@ -167,37 +219,41 @@ Re-score after fixes: ~88/100  (B)
 
 Critic 和 Builder **不共享上下文**，独立 `agent()` 调用。第 3 轮仍 < 80 → 停止，输出 blockers。
 
-#### Phase 6 — DESIGN SPEC 输出（Mode A → B 桥接）
+#### Phase 6 — DESIGN SPEC 写入（供任意下游模式读取）
 
-Review 通过后，自动输出 `design-spec.json`，供 Mode B 读取：
+Review 通过后，写入/更新 `/tmp/design-spec.json`。追加字段，不删除已有字段：
 
 ```json
 {
   "task": "...",
-  "components": {
-    "KPICard":   "nodeId:xxx",
-    "TableRow":  "nodeId:xxx"
-  },
+  "lastMode": "A",
+  "updatedAt": "YYYY-MM-DDTHH:mm:ssZ",
+  "states": ["inferred from brief"],
   "colorTokens": {
-    "primary":   "--pac-theme-color",
-    "title":     "--color-title--",
-    "body":      "--color-text--",
-    "muted":     "--color-info--",
-    "border":    "--pac-filter-line-color"
+    "primary":   "#FF9F43",
+    "foreground":"#45464F",
+    "body":      "#66666C",
+    "muted":     "#B2B2B8",
+    "border":    "#DEDFE3"
   },
-  "spacing": {
-    "card-padding":  "--pac-s4--",
-    "section-gap":   "--pac-s6--",
-    "item-gap":      "--pac-s2--"
+  "spacingTokens": {
+    "card-padding": "16px",
+    "section-gap":  "24px"
   },
-  "figmaFileKey": "...",
-  "figmaPageId":  "...",
-  "generatedAt":  "YYYY-MM-DDTHH:mm:ssZ"
+  "components": {
+    "KPICard":  "nodeId:xxx",
+    "TableRow": "nodeId:xxx"
+  },
+  "screenshots": ["/tmp/design-screenshots/result.png"],
+  "figma": {
+    "fileKey": "...",
+    "pageId":  "...",
+    "nodeIds": {}
+  }
 }
 ```
 
-保存路径：`/tmp/design-spec.json`
-Mode B 在 pre-flight 时读取此文件，以真实设计规格为基准构建 Demo。
+下游 Mode B / D 读取此文件，以真实 token 和组件名为基准构建，无需重新推断。
 
 #### 版本管理规范
 
@@ -276,11 +332,33 @@ comm -23 /tmp/used-tokens.txt /tmp/defined-tokens.txt
 tail -3 /tmp/vite.log  # 确认 HMR 无报错
 ```
 
+**Step 7: 写入 design-spec.json（供下游模式读取）**
+```bash
+# 追加/创建，保留已有字段
+node -e "
+const fs = require('fs');
+const path = '/tmp/design-spec.json';
+const prev = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path)) : {};
+const next = {
+  ...prev,
+  lastMode: 'B',
+  updatedAt: new Date().toISOString(),
+  task: prev.task || '<fill in>',
+  states: ['<list states>'],
+  components: { ...prev.components, '<ComponentName>': 'src/views/XxxDemo.vue' },
+  colorTokens: prev.colorTokens || {},
+};
+fs.writeFileSync(path, JSON.stringify(next, null, 2));
+console.log('spec updated');
+"
+```
+
 ### Mode B 完成标准
 - [ ] HMR 无报错
 - [ ] Loading / Data / Empty 三种状态均可触发
 - [ ] 无单文件超过 300 行
 - [ ] Token 校验命令输出为空
+- [ ] design-spec.json 已更新（`lastMode: "B"`）
 - [ ] 快速 Design Score 自查 ≥ 70（Mode B 门槛低于 Mode A）：
   - 无 emoji 作为功能图标
   - 圆角/颜色主色统一（不混用）
@@ -309,6 +387,7 @@ tail -3 /tmp/vite.log  # 确认 HMR 无报错
 ### Mode C 完成标准
 - [ ] 截图已返回，用户可看到整体结构
 - [ ] 层级和布局与口头描述一致
+- [ ] 写入 design-spec.json：`lastMode: "C"`，`screenshots` 字段记录截图路径，`states` 字段记录识别出的页面区块
 
 ---
 
@@ -520,6 +599,33 @@ const fillSuccess = 'hsl(var(--pac-success, 148 66% 47%))'
 - [ ] 图标统一：`@icon-park/vue-next` outline size=18 stroke-width=3
 - [ ] 最小字号 ≥ 11px
 - [ ] 3 种状态（loading / data / empty）均可触发
+- [ ] design-spec.json 已更新：`lastMode: "D"`，`modeD.projectPath`、`modeD.devUrl`、`colorTokens`、`spacingTokens` 字段已填写
+
+**Mode D 写入 spec 示例：**
+```bash
+node -e "
+const fs = require('fs');
+const path = '/tmp/design-spec.json';
+const prev = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path)) : {};
+const next = {
+  ...prev,
+  lastMode: 'D',
+  updatedAt: new Date().toISOString(),
+  colorTokens: {
+    primary: '#FF9F43', foreground: '#45464F',
+    body: '#66666C', border: '#DEDFE3', error: '#EA5455'
+  },
+  spacingTokens: { s1:'4px', s2:'8px', s3:'12px', s4:'16px', s6:'24px', s8:'32px' },
+  modeD: {
+    projectPath: '<absolute path>',
+    devUrl: 'http://localhost:5174',
+    themes: ['', 'theme-custom-pacvue']
+  }
+};
+fs.writeFileSync(path, JSON.stringify(next, null, 2));
+console.log('spec updated');
+"
+```
 
 ---
 
