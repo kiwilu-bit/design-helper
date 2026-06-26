@@ -105,32 +105,65 @@ btn.fills = [{ type: 'SOLID', color: orange }]
 #### Phase 4 — INTERACTIONS
 加 hover / click prototype reactions。
 
-#### Phase 5 — BLIND CRITIQUE（真正独立的第二视角）
+#### Phase 5 — DESIGN SCORE + BLIND CRITIQUE
 
-> **核心原则：** Critic 和 Builder 不共享上下文。Critic 只看原始 brief + 截图，完全不知道 Builder 做了哪些实现决策。
+> **核心原则：** Critic 完全盲评 — 只收到原始 brief + 截图，不知道 Builder 的任何实现决策。
+> **质量门槛：** ≥ 80/100 才可交付。< 80 → 按 fixList 修复后重评。最多 3 轮。
 
-Critic agent 的 prompt 结构：
+##### 评分体系（融合 StyleSeed + Pacvue 专属规则）
+
+评分从满分开始，按违规扣分，总计 100 分：
+
+| 维度 | 满分 | 通用扣分项 |
+|---|---|---|
+| **Coherence 连贯性** | 20 | 混用圆角 −6，多色强调 −5，emoji 当图标 −6，混用图标家族 −3，控件高度不统一 −3 |
+| **Color 色彩纪律** | 16 | 纯黑 `#000` 文字 −4（上限 −8），硬编码 hex 替代 token −2 each，普通状态用了状态色 −4，装饰用色 −3，无文字只靠颜色表达状态 −4 |
+| **Typography 层次** | 16 | 数字与单位非 2:1 比例 −4，无明显主次层级 −5，字号任意无比例 −4，行高不合理 −3 |
+| **Layout & Spacing 布局** | 12 | 内容直接放在页面背景而不用卡片 −6，非 8px 网格间距 −3，相同 section 类型连续重复 −4 |
+| **States 状态完整性** | 12 | 缺少 empty / loading / error 任何一种 −5 each（上限 −10），empty state 无下一步动作 −4 |
+| **UX Writing 文案** | 12 | 按钮文字模糊（"确认" 而非 "发送 ¥2,400"）−4，错误提示责怪用户 −4，同义词混用 / 废话 −2 |
+| **Motion & Polish 精细度** | 12 | 随意 fade 无统一节奏 −3，动效阻塞操作 −4，无 prefers-reduced-motion −3，单层纯黑阴影 −2 |
+
+**Pacvue 专属扣分（叠加到对应维度）：**
+- Coherence：同一页面混用橙色 + 蓝色主色 −8
+- Color：使用 `#ff9f43` 硬编码而非 `var(--pac-theme-color)` −3 each
+- Layout：`createFrame()` + 绝对定位替代 auto-layout −8（关键错误）
+- Color：Tag opacity 加在 frame 上而非 fill color −5
+- Color：Pagination active 用橙色填充背景而非仅 border −5
+
+##### 评分区间
+
+| 分数 | 等级 | 结论 |
+|---|---|---|
+| 90–100 | A | 可交付，精致 |
+| 80–89 | B | 可交付，有小问题 |
+| 70–79 | C | 不可交付，修完再评 |
+| 60–69 | D | 较多问题 |
+| < 60 | F | 返工 |
+
+##### 输出格式
+
 ```
-你是一个视觉 QA 评审员。
-你不知道这个设计是怎么做出来的，也不知道 Builder 做了哪些决定。
+## Design Score: 76 / 100  (C)
 
-你只有：
-1. 原始需求（brief）：{brief.successCriteria}
-2. 当前结果截图（通过 get_screenshot 获取）
+Coherence            15/20   sharp cards + pill buttons; orange+blue 混用 (Pacvue −8)
+Color discipline     11/16   hardcoded #ff9f43 ×3 (l.42,67,89); tag opacity on frame (l.55)
+Hierarchy & type     15/16   hero 数字/单位 1:1（应 2:1）
+Layout & spacing     10/12   两个相同 KPI section 连续排列
+States                9/12   缺少 empty state
+UX writing           10/12   "确认" 按钮 (l.120)
+Motion & polish      10/12   单层 box-shadow: 0 4px 6px #000
 
-你的任务：找出结果与需求之间的差距。
-- 不要问"这是故意的吗"——只要不符合需求就标出来
-- 用对抗性视角：你的工作是找问题，不是认可决策
-- 按 CRITICAL / MAJOR / MINOR 分级输出
+### Fix first（按得分增益排序）
+1. 统一圆角 + 去掉蓝色主色（改 #ff9f43）          → +10 Coherence/Color
+2. hardcoded hex 替换为 var(--pac-theme-color)    → +6  Color
+3. 补充 empty state + 空状态 CTA                  → +5  States
+4. "确认" → "发送申请"                            → +4  Writing
 
-Layout checks:
-{LAYOUT_RULES}
-
-Color checks:
-{COLOR_SPEC}
+Re-score after fixes: ~88/100  (B)
 ```
 
-Critic 和 Builder 通过独立的 `agent()` 调用，**不传 Builder 的中间产物**（不传 componentRegistry、不传 layout 对象）。最多 3 轮，第 3 轮仍不通过则停止并输出 blockers 列表。
+Critic 和 Builder **不共享上下文**，独立 `agent()` 调用。第 3 轮仍 < 80 → 停止，输出 blockers。
 
 #### Phase 6 — DESIGN SPEC 输出（Mode A → B 桥接）
 
@@ -246,6 +279,11 @@ tail -3 /tmp/vite.log  # 确认 HMR 无报错
 - [ ] Loading / Data / Empty 三种状态均可触发
 - [ ] 无单文件超过 300 行
 - [ ] Token 校验命令输出为空
+- [ ] 快速 Design Score 自查 ≥ 70（Mode B 门槛低于 Mode A）：
+  - 无 emoji 作为功能图标
+  - 圆角/颜色主色统一（不混用）
+  - 按钮文字描述具体动作（非"确认"/"提交"）
+  - 至少一个 empty state 有下一步引导
 
 ---
 
