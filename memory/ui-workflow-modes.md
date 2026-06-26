@@ -1,6 +1,6 @@
 ---
 name: ui-workflow-modes
-description: Three UI workflow modes — Mode A Figma精细化, Mode B Vue快速Demo, Mode C Figma快速线框. Always run Pre-flight Check first. Decision tree inside.
+description: Four UI workflow modes — A Figma精细化, B Vue快速Demo, C Figma快速线框, D shadcn独立双主题. Always run Pre-flight Check first. Decision tree inside.
 metadata:
   type: project
 ---
@@ -109,6 +109,38 @@ comm -23 /tmp/used-tokens.txt /tmp/defined-tokens.txt
 
 ---
 
+## Mode D — shadcn-vue 独立双主题项目
+
+**When:** user says shadcn / 独立项目 / 双主题 / 可切换主题 / 规范可交付的前端
+
+**Tool:** 独立 Vite + Vue 3 + Tailwind v3 + shadcn-vue（不嵌入 Pacvue 工程）
+
+**Key rules:**
+- Tailwind 无 `important` wrapper，类名全局生效
+- CSS 变量双主题：`:root`（Default zinc）+ `.theme-custom-pacvue`（Pacvue orange）
+- 根元素绑定 `:class="activeTheme"`，切换主题 class 即可
+- shadcn 组件：Button / Card / Badge / Skeleton / Separator / Sheet（`src/components/ui/`）
+- 图标：`@icon-park/vue-next`，`theme="outline"` `size="18"` `:stroke-width="3"`
+- 颜色：`fillFg / fillMuted / fillPrimary / fillSuccess` 均为 `hsl(var(--token))`，随主题切换
+- 间距 token：`--spacing-1 ~ --spacing-12`，Pacvue 主题下指向 `--pac-s*--`
+- 最小字号：11px（`text-[11px]`）
+- 禁止：内联 hex 颜色、裸 px 间距值、硬编码主题色
+
+**Pacvue token 颜色（来源：ENT Design System New node 2666:31076）：**
+- Primary: `#FF9F43` → `--primary: 31 100% 63%`
+- 标题文字: `#45464F` → `--foreground: 237 7% 29%`
+- 正文: `#66666C` → `--muted-foreground: 240 3% 41%`
+- 边框: `#DEDFE3` → `--border: 228 9% 88%`
+- Error: `#EA5455` → `--destructive: 0 77% 62%`
+
+**Done when:**
+- `pnpm dev` 启动无报错
+- Default / Pacvue 双主题切换视觉差异明显
+- 所有颜色/间距走 token
+- 3 种状态（loading / data / empty）均可触发
+
+---
+
 ## Decision Tree
 
 ```
@@ -123,7 +155,10 @@ Says demo / prototype / 跑起来 / 演示?
 Says wireframe / 草图 / 线框 / 看结构?
         → YES → Mode C (快速线框)
         ↓ NO
-Ask: 需要 Figma 设计稿、可运行 Demo，还是快速结构草图？
+Says shadcn / 独立项目 / 双主题 / 可切换主题 / 规范可交付前端?
+        → YES → Mode D (shadcn 双主题)
+        ↓ NO
+Ask: 需要 Figma 设计稿、可运行 Demo、快速草图，还是带主题系统的 shadcn 独立项目？
 ```
 
 **Why separate modes:** toolchain, quality gates, and deliverables are completely different.
