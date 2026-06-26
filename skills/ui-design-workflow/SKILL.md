@@ -26,20 +26,22 @@ Before picking a mode, answer these 2 questions. If either answer is "no", resol
 
 ## STEP 0: PICK A MODE
 
-| | **Mode A — 精细化 Figma** | **Mode B — 快速 Demo** | **Mode C — 快速线框** |
-|---|---|---|---|
-| 交付物 | Figma 节点，可交付 | 浏览器可运行 Vue 页面 | Figma 草图，仅结构 |
-| 工具 | `use_figma` Plugin API | Vue 3 SFC + 路由 | `use_figma`（简化） |
-| 颜色/间距 | 必须用 Pacvue token | 尽量用 token，不强制 | 不要求，灰色占位 |
-| Auto-layout | 强制，违反=CRITICAL | 不要求，flex/grid 即可 | 推荐但不强制 |
-| 验收 | Blind Critique Loop（≤3轮）| HMR 无报错 + 3 种状态 | 截图对齐信息架构即可 |
-| 速度 | 慢（精细） | 中（30 分钟内跑通） | 快（5 分钟出草图） |
+| | **Mode A — 精细化 Figma** | **Mode B — 快速 Demo** | **Mode C — 快速线框** | **Mode D — shadcn 可交付** |
+|---|---|---|---|---|
+| 交付物 | Figma 节点，可交付 | 浏览器可运行 Vue 页面 | Figma 草图，仅结构 | 独立 shadcn-vue 项目，双主题切换 |
+| 工具 | `use_figma` Plugin API | Vue 3 SFC + 路由（嵌入 Pacvue 工程） | `use_figma`（简化） | 独立 Vite + Vue 3 + Tailwind + shadcn-vue |
+| 颜色/间距 | 必须用 Pacvue token | 尽量用 token，不强制 | 不要求，灰色占位 | CSS 变量系统，支持 Default / Pacvue 双主题 |
+| 组件 | Figma component | Element Plus / Pacvue | 无 | shadcn-vue（Button/Card/Badge/Skeleton/Sheet） |
+| 图标 | — | 自写 SVG 或 IconPark | — | IconPark `outline` size=18 stroke-width=3 |
+| 验收 | Blind Critique Loop（≤3轮）| HMR 无报错 + 3 种状态 | 截图对齐信息架构即可 | HMR 无报错 + 双主题切换正常 + Design Score ≥ 70 |
+| 速度 | 慢（精细） | 中（30 分钟内跑通） | 快（5 分钟出草图） | 中（1 小时内，含主题系统搭建） |
 
 **决策树：**
 - 用户说「Figma / 设计稿 / 符合规范 / 交付」→ **Mode A**
 - 用户说「demo / 跑起来 / 原型 / 演示」→ **Mode B**
 - 用户说「草图 / 线框 / 快速看结构 / 方案讨论」→ **Mode C**
-- 不确定 → 问：「需要 Figma 设计稿、可运行 Demo，还是快速结构草图？」
+- 用户说「shadcn / 独立项目 / 双主题 / 可切换主题 / 规范可交付的前端」→ **Mode D**
+- 不确定 → 问：「需要 Figma 设计稿、可运行 Demo、快速草图，还是带主题系统的 shadcn 独立项目？」
 
 ---
 
@@ -310,6 +312,217 @@ tail -3 /tmp/vite.log  # 确认 HMR 无报错
 
 ---
 
+---
+
+## Mode D — shadcn-vue 独立项目（双主题切换）
+
+**目标：** 搭建一个独立的、带 Pacvue 设计系统的 shadcn-vue 前端项目，支持 Default / Pacvue 双主题实时切换，适合高质量原型或可交付的前端 demo。
+
+### Pre-flight
+- [ ] 确认是新建项目（不嵌入 Pacvue Element Plus 工程，避免 Tailwind `important` 冲突）
+- [ ] 确认目标路径：`/Users/.../Desktop/element/<project-name>/`
+
+---
+
+### Step 1 — 初始化项目
+
+```bash
+pnpm create vite <project-name> --template vue
+cd <project-name>
+pnpm install
+
+# Tailwind CSS v3（注意：用 v3，不用 v4，shadcn-vue 暂不支持 v4）
+pnpm add -D tailwindcss@3 postcss autoprefixer
+npx tailwindcss init -p
+
+# shadcn-vue 依赖（不用 CLI，手动引入）
+pnpm add reka-ui class-variance-authority clsx tailwind-merge
+
+# IconPark 图标库
+pnpm add @icon-park/vue-next
+```
+
+### Step 2 — 配置 Tailwind
+
+`tailwind.config.js`：
+```js
+export default {
+  content: ['./index.html', './src/**/*.{vue,js,ts}'],
+  theme: {
+    extend: {
+      colors: {
+        border:      'hsl(var(--border))',
+        background:  'hsl(var(--background))',
+        foreground:  'hsl(var(--foreground))',
+        primary:     { DEFAULT: 'hsl(var(--primary))', foreground: 'hsl(var(--primary-foreground))' },
+        secondary:   { DEFAULT: 'hsl(var(--secondary))', foreground: 'hsl(var(--secondary-foreground))' },
+        muted:       { DEFAULT: 'hsl(var(--muted))', foreground: 'hsl(var(--muted-foreground))' },
+        accent:      { DEFAULT: 'hsl(var(--accent))', foreground: 'hsl(var(--accent-foreground))' },
+        destructive: { DEFAULT: 'hsl(var(--destructive))', foreground: 'hsl(var(--destructive-foreground))' },
+        card:        { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
+      },
+      borderRadius: {
+        lg: 'var(--radius)', md: 'calc(var(--radius) - 2px)', sm: 'calc(var(--radius) - 4px)',
+      },
+      spacing: {
+        '1': 'var(--spacing-1)', '2': 'var(--spacing-2)', '3': 'var(--spacing-3)',
+        '4': 'var(--spacing-4)', '5': 'var(--spacing-5)', '6': 'var(--spacing-6)',
+        '8': 'var(--spacing-8)', '10': 'var(--spacing-10)', '12': 'var(--spacing-12)',
+      },
+    },
+  },
+}
+```
+
+`vite.config.js`：添加 `@` alias：
+```js
+import { fileURLToPath, URL } from 'node:url'
+resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } }
+```
+
+### Step 3 — CSS Token 系统
+
+`src/style.css`：
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* 间距 token（两个主题共用） */
+  :root {
+    --spacing-1: 4px;  --spacing-2: 8px;   --spacing-3: 12px;
+    --spacing-4: 16px; --spacing-5: 20px;  --spacing-6: 24px;
+    --spacing-8: 32px; --spacing-10: 40px; --spacing-12: 48px;
+  }
+
+  /* Default 主题（shadcn Zinc） */
+  :root {
+    --background: 0 0% 100%; --foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%; --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%; --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%; --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%; --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%; --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%; --input: 240 5.9% 90%; --ring: 240 5.9% 10%;
+    --card: 0 0% 100%; --card-foreground: 240 10% 3.9%;
+    --radius: 0.5rem;
+  }
+
+  /* custom-pacvue 主题（来源：ENT Design System New node 2666:31076） */
+  .theme-custom-pacvue {
+    --background: 0 0% 100%; --foreground: 237 7% 29%;      /* #45464F */
+    --card: 0 0% 100%; --card-foreground: 237 7% 29%;
+    --primary: 31 100% 63%; --primary-foreground: 0 0% 100%; /* #FF9F43 */
+    --secondary: 210 5% 96%; --secondary-foreground: 237 7% 29%;
+    --muted: 0 0% 97%; --muted-foreground: 240 3% 41%;       /* #66666C */
+    --accent: 31 100% 95%; --accent-foreground: 31 100% 57%; /* #FFF1E3 */
+    --destructive: 0 77% 62%; --destructive-foreground: 0 0% 100%; /* #EA5455 */
+    --border: 228 9% 88%; --input: 228 9% 88%;               /* #DEDFE3 */
+    --ring: 31 100% 63%; --radius: 6px;
+
+    /* Pacvue 扩展 token */
+    --pac-success:    148 66% 47%;   /* #28C76F */
+    --pac-link:       214 98% 52%;   /* #0D6EFD */
+    --pac-text-title: 237 7% 29%;    /* #45464F */
+    --pac-text-body:  240 3% 41%;    /* #66666C */
+    --pac-text-muted: 240 2% 71%;    /* #B2B2B8 */
+    --pac-divider:    228 14% 94%;   /* #EDEEF1 */
+    --pac-fill-selected-orange: 31 100% 95%;  /* #FFF1E3 */
+    --pac-fill-hover-orange:    31 100% 98%;  /* #FFFAF6 */
+    --pac-blue-primary: 214 97% 36%; /* #0253B6 */
+
+    /* Pacvue 间距规范 → 覆盖 --spacing-* */
+    --pac-s1--: 4px; --pac-s2--: 8px;  --pac-s3--: 12px;
+    --pac-s4--: 16px; --pac-s5--: 20px; --pac-s6--: 24px;
+    --pac-s8--: 32px; --pac-s10--: 40px;
+    --spacing-1: var(--pac-s1--); --spacing-2: var(--pac-s2--);
+    --spacing-3: var(--pac-s3--); --spacing-4: var(--pac-s4--);
+    --spacing-5: var(--pac-s5--); --spacing-6: var(--pac-s6--);
+    --spacing-8: var(--pac-s8--); --spacing-10: var(--pac-s10--);
+  }
+
+  * { border-color: hsl(var(--border)); box-sizing: border-box; }
+  body { margin: 0; background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
+}
+```
+
+### Step 4 — 基础 UI 组件
+
+在 `src/components/ui/` 下创建（使用 `class-variance-authority` + Tailwind）：
+- `button.vue` — variant: default / outline / secondary / ghost / destructive / link；size: default / sm / lg / icon
+- `card.vue` — `rounded-lg border bg-card shadow-sm`
+- `badge.vue` — variant: default / secondary / destructive / outline
+- `skeleton.vue` — `animate-pulse rounded-md bg-muted`
+- `separator.vue` — horizontal / vertical
+- `sheet.vue` — 右侧滑出抽屉，使用 Vue `Teleport` + CSS Transition
+
+`src/lib/utils.js`：
+```js
+import { clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+export function cn(...inputs) { return twMerge(clsx(inputs)) }
+```
+
+### Step 5 — 主题切换器
+
+在根组件绑定主题 class：
+```vue
+<div class="min-h-screen bg-background text-foreground" :class="activeTheme">
+  <!-- 切换条 -->
+  <div class="flex items-center gap-1 rounded-lg border bg-muted p-1">
+    <button v-for="t in themes" :key="t.id"
+      :class="activeTheme === t.id ? 'bg-background shadow-sm' : 'text-muted-foreground'"
+      @click="activeTheme = t.id">
+      {{ t.label }}
+    </button>
+  </div>
+</div>
+```
+
+```js
+const themes = [
+  { id: '',                    label: 'Default' },
+  { id: 'theme-custom-pacvue', label: 'Pacvue'  },
+]
+const activeTheme = ref('')
+```
+
+### Step 6 — 图标规范
+
+使用 `@icon-park/vue-next`，统一参数：
+```vue
+<UploadOne theme="outline" size="18" :stroke-width="3" :fill="fillMuted" />
+```
+
+填充色变量（随主题切换）：
+```js
+const fillFg      = 'hsl(var(--foreground))'
+const fillMuted   = 'hsl(var(--muted-foreground))'
+const fillPrimary = 'hsl(var(--primary))'
+const fillSuccess = 'hsl(var(--pac-success, 148 66% 47%))'
+```
+
+### Design Rules（Mode D 专属）
+
+- **最小字号 11px**（`text-[11px]`），不得更小
+- **间距必须走 token**：`gap-*`、`px-*`、`py-*` 全部使用 Tailwind spacing class，不写裸 px 值
+- **不写 `style=""` 内联颜色**：所有颜色通过 `hsl(var(--token))` 或 Tailwind 颜色 class
+- **shadcn 组件优先**：有现成组件的场景不写裸 HTML 元素
+- **Pacvue 主题下**颜色、间距全部走 `--pac-*` token，切换主题时自动跟随
+
+### Mode D 完成标准
+
+- [ ] `pnpm dev` 启动无报错
+- [ ] Default / Pacvue 主题均可切换，视觉差异明显
+- [ ] 所有颜色使用 CSS token（无硬编码 hex）
+- [ ] 所有间距使用 Tailwind spacing class（无裸 px 值）
+- [ ] 图标统一：`@icon-park/vue-next` outline size=18 stroke-width=3
+- [ ] 最小字号 ≥ 11px
+- [ ] 3 种状态（loading / data / empty）均可触发
+
+---
+
 ## Trigger Phrases
 
 | 用户说 | 启动 |
@@ -317,4 +530,5 @@ tail -3 /tmp/vite.log  # 确认 HMR 无报错
 | 设计 / 设计稿 / Figma / 规范 / 交付 | Mode A |
 | demo / 跑起来 / 原型 / 演示 / 看看效果 | Mode B |
 | 草图 / 线框 / 快速看结构 / 方案讨论 | Mode C |
+| shadcn / 独立项目 / 双主题 / 可切换主题 | Mode D |
 | 帮我做一个... | 先问清楚再决定 |
